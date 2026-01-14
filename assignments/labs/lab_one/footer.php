@@ -1,3 +1,4 @@
+
 <?php
 // footer.php
 // Shared footer content. Included from index.php.

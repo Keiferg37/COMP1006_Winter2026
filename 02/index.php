@@ -3,7 +3,7 @@
 //1. Set Up & Start 
 
 
-//2. Code Commenting 
+//2. Code Commenting
 
 // inline comment 
 //3. Variables, Data Types, Concatenation, Conditional Statements & Echo
