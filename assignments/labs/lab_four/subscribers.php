@@ -1,5 +1,4 @@
 <?php
-//TODO:
 require "includes/connect.php";
 
 /*
@@ -11,7 +10,14 @@ require "includes/connect.php";
   5. Fetch all results into $subscribers
 */
 
-$subscribers = []; // placeholder
+$STMT = $DBH->prepare("
+    SELECT id, first_name, last_name, email, subscribed_at
+    FROM subscribers
+    ORDER BY subscribed_at DESC
+");
+
+$STMT->execute();
+$subscribers = $STMT->fetchAll();
 ?>
 
 <main class="container mt-4">
@@ -31,7 +37,15 @@ $subscribers = []; // placeholder
         </tr>
       </thead>
       <tbody>
-        <!-- TODO: Loop through $subscribers and output each row -->
+        <?php foreach ($subscribers as $S): ?>
+          <tr>
+            <td><?= htmlspecialchars($S["id"]) ?></td>
+            <td><?= htmlspecialchars($S["first_name"]) ?></td>
+            <td><?= htmlspecialchars($S["last_name"]) ?></td>
+            <td><?= htmlspecialchars($S["email"]) ?></td>
+            <td><?= htmlspecialchars($S["subscribed_at"]) ?></td>
+          </tr>
+        <?php endforeach; ?>
       </tbody>
     </table>
   <?php endif; ?>
