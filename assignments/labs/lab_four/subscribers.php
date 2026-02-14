@@ -54,5 +54,3 @@ $subscribers = $STMT->fetchAll();
     <a href="index.php">Back to Subscribe Form</a>
   </p>
 </main>
-
-<?php require "includes/footer.php"; ?>
