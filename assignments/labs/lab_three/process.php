@@ -93,7 +93,7 @@ if (!empty($errors)) {
 // ------------------------------------
 // Send email
 // ------------------------------------
-$to = "info@example.com"; // Replace with instructor-required email
+$to = "webdev992@gmail.com"; // Updated to actual email
 $subject = "New Contact Form Submission";
 
 // Build email message
@@ -103,12 +103,14 @@ $body =
 "Email: {$email}\n\n" .
 "Message:\n{$message}\n";
 
-// Email headers
-$headers = "Reply-To: {$email}\r\n";
+// Email headers - Fixed header injection vulnerability
+$safeEmail = str_replace(["\r", "\n"], '', $email); // Remove newlines to prevent header injection
+$headers = "From: noreply@bakeittilyoumakeit.com\r\n";
+$headers .= "Reply-To: {$safeEmail}\r\n";
 $headers .= "Content-Type: text/plain; charset=UTF-8";
 
 // Attempt to send email
-$mailSent = @mail($to, $subject, $body, $headers);
+$mailSent = mail($to, $subject, $body, $headers);
 
 // ------------------------------------
 // Confirmation page
