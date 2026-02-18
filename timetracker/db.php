@@ -1,13 +1,12 @@
 <?php
 // Database connection settings
-$host = "localhost";
-$user = "root";
-$password = "";
-$database = "timetracker";
-$port = 3307;
+$host = "sql303.infinityfree.com";
+$user = "if0_41185034";
+$password = "fDg08WjtcZoy7";
+$database = "if0_41185034_timetracker";
 
 // Create connection
-$conn = mysqli_connect($host, $user, $password, $database, $port);
+$conn = mysqli_connect($host, $user, $password, $database);
 
 // Check if connection was successful
 if (!$conn) {
