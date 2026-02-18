@@ -22,6 +22,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if ($_POST['time_spent'] === "" || !is_numeric($_POST['time_spent'])) {
         $errors[] = "Time spent must be a number.";
     }
+    // Verify reCAPTCHA
+    if (empty($_POST['g-recaptcha-response'])) {
+        $errors[] = "Please complete the reCAPTCHA.";
+    } else {
+        $secret = "YOUR_SECRET_KEY_HERE";
+        $response = file_get_contents("https://www.google.com/recaptcha/api/siteverify?secret=$secret&response=" . $_POST['g-recaptcha-response']);
+        $responseData = json_decode($response);
+        if (!$responseData->success) {
+            $errors[] = "reCAPTCHA verification failed. Please try again.";
+        }
+    }
 
     // If no errors, insert into database
     if (empty($errors)) {
@@ -51,6 +62,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <meta charset="UTF-8">
     <title>Add Task</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- reCAPTCHA script -->
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 </head>
 <body>
 
@@ -100,6 +113,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <label>Time Spent (hours)</label>
             <input type="number" name="time_spent" class="form-control" step="0.01" min="0" required
                    value="<?php echo isset($_POST['time_spent']) ? $_POST['time_spent'] : ''; ?>">
+        </div>
+
+        <!-- Google reCAPTCHA -->
+        <div class="mb-3">
+            <div class="g-recaptcha" data-sitekey="YOUR_SITE_KEY_HERE"></div>
         </div>
 
         <a href="index.php" class="btn btn-secondary">Cancel</a>
