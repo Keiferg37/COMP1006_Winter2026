@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (empty($_POST['g-recaptcha-response'])) {
         $errors[] = "Please complete the reCAPTCHA.";
     } else {
-        $secret = "YOUR_SECRET_KEY_HERE";
+        $secret = "6LeCfG8sAAAAAGkFqfwxrmU0VoN18VtvtEhDDDFi";
         $response = file_get_contents("https://www.google.com/recaptcha/api/siteverify?secret=$secret&response=" . $_POST['g-recaptcha-response']);
         $responseData = json_decode($response);
         if (!$responseData->success) {
@@ -117,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         <!-- Google reCAPTCHA -->
         <div class="mb-3">
-            <div class="g-recaptcha" data-sitekey="YOUR_SITE_KEY_HERE"></div>
+            <div class="g-recaptcha" data-sitekey="6LeCfG8sAAAAACNSqIrBjMYM31KyTqM4nbgynC-6"></div>
         </div>
 
         <a href="index.php" class="btn btn-secondary">Cancel</a>
