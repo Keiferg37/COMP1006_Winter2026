@@ -110,4 +110,4 @@ $orders = $stmt->fetchAll();
       window.location.reload();
     }
   });
-</script>ß
+</script>
