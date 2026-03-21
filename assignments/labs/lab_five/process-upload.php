@@ -1,6 +1,6 @@
 <?php
 // Include the site header (navigation, Bootstrap, etc.)
-require "includes/header.php";
+require "../../../10/includes/header.php";
 ?>
 
 <main class="container mt-4">
@@ -81,4 +81,4 @@ require "includes/header.php";
     <a href="upload.php" class="btn btn-secondary mt-4">&larr; Upload another image</a>
 </main>
 
-<?php require "includes/footer.php"; ?>
+<?php require "../../../10/includes/footer.php"; ?>
