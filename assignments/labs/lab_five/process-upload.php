@@ -1,3 +1,11 @@
+// During this lab, I ran into some issues with Git not tracking the empty uploads folder,
+// so I had to work through setting up a .gitkeep file. I also had to fix the file paths
+// in both upload.php and process-upload.php multiple times to correctly reference the
+// includes folder (header.php and footer.php) since my lab files are in a different
+// directory than the main project. This involved deleting and re-uploading the lab files
+// a few times to get everything working properly. Through this process I learned how
+// file paths and folder structure matter when building a PHP upload feature.
+
 <?php
 // Include the site header (navigation, Bootstrap, etc.)
 require "../../../10/includes/header.php";
