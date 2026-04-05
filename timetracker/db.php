@@ -1,15 +1,17 @@
 <?php
 // Database connection settings
-$host = "sql303.infinityfree.com";
-$user = "if0_41185034";
+$host     = "sql303.infinityfree.com";
+$user     = "if0_41185034";
 $password = "fDg08WjtcZoy7";
 $database = "if0_41185034_timetracker";
 
-// Create connection
-$conn = mysqli_connect($host, $user, $password, $database);
-
-// Check if connection was successful
-if (!$conn) {
-    die("Connection failed: " . mysqli_connect_error());
+// Create PDO connection
+try {
+    $pdo = new PDO("mysql:host=$host;dbname=$database;charset=utf8mb4", $user, $password);
+    // Set PDO error mode to exception
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    // Set default fetch mode to associative array
+    $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    die("Connection failed: " . $e->getMessage());
 }
-?>
