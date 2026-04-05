@@ -1,18 +1,29 @@
 <?php
-require 'db.php';
+require_once 'db.php';
+require_once 'auth.php';
+requireLogin();
 
-// Check if an id was provided in the URL
+// Check if an id was provided
 if (isset($_GET['id'])) {
+    $id = (int)$_GET['id'];
 
-    $id = mysqli_real_escape_string($conn, $_GET['id']);
+    // Fetch the task to get attachment filename - only if owned by current user
+    $stmt = $pdo->prepare("SELECT attachment FROM tasks WHERE id = :id AND user_id = :user_id");
+    $stmt->execute([':id' => $id, ':user_id' => getCurrentUserId()]);
+    $task = $stmt->fetch();
 
-    // Delete the task from the database
-    $sql = "DELETE FROM tasks WHERE id = '$id'";
+    if ($task) {
+        // Delete the attachment file if it exists
+        if ($task['attachment'] && file_exists("uploads/" . $task['attachment'])) {
+            unlink("uploads/" . $task['attachment']);
+        }
 
-    mysqli_query($conn, $sql);
+        // Delete the task from the database
+        $stmt = $pdo->prepare("DELETE FROM tasks WHERE id = :id AND user_id = :user_id");
+        $stmt->execute([':id' => $id, ':user_id' => getCurrentUserId()]);
+    }
 }
 
 // Redirect back to index
 header("Location: index.php");
 exit();
-?>
