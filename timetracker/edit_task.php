@@ -1,134 +1,244 @@
 <?php
-require 'db.php';
+// Make sure user is logged in
+require "includes/auth.php";
+
+// Connect to database
+require "includes/connect.php";
 
 $errors = [];
 
-// Get the task id from the URL
+// Make sure we received an ID in the URL
 if (!isset($_GET['id'])) {
     header("Location: index.php");
-    exit();
+    exit;
 }
 
-$id = mysqli_real_escape_string($conn, $_GET['id']);
+$taskId = (int)$_GET['id'];
 
-// Fetch the existing task data
-$result = mysqli_query($conn, "SELECT * FROM tasks WHERE id = '$id'");
-$task = mysqli_fetch_assoc($result);
+// --------------------------------------------------
+// If form is submitted, UPDATE the task
+// --------------------------------------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-// If task not found redirect home
-if (!$task) {
-    header("Location: index.php");
-    exit();
-}
-
-// Check if form was submitted
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    // Get and sanitize form values
+    $taskName  = trim(filter_input(INPUT_POST, 'task_name', FILTER_SANITIZE_SPECIAL_CHARS));
+    $category  = trim(filter_input(INPUT_POST, 'category', FILTER_SANITIZE_SPECIAL_CHARS));
+    $priority  = $_POST['priority'] ?? '';
+    $dueDate   = $_POST['due_date'] ?? '';
+    $timeSpent = filter_input(INPUT_POST, 'time_spent', FILTER_VALIDATE_FLOAT);
 
     // Server-side validation
-    if (empty($_POST['task_name'])) {
+    if ($taskName === '') {
         $errors[] = "Task name is required.";
     }
-    if (empty($_POST['category'])) {
+
+    if ($category === '') {
         $errors[] = "Category is required.";
     }
-    if (empty($_POST['priority'])) {
-        $errors[] = "Priority is required.";
+
+    if ($priority === '' || !in_array($priority, ['high', 'medium', 'low'])) {
+        $errors[] = "Please select a valid priority.";
     }
-    if (empty($_POST['due_date'])) {
+
+    if ($dueDate === '') {
         $errors[] = "Due date is required.";
     }
-    if ($_POST['time_spent'] === "" || !is_numeric($_POST['time_spent'])) {
-        $errors[] = "Time spent must be a number.";
+
+    if ($timeSpent === false || $timeSpent < 0) {
+        $errors[] = "Time spent must be a valid number.";
     }
 
-    // If no errors update the task
-    if (empty($errors)) {
-        $task_name  = mysqli_real_escape_string($conn, $_POST['task_name']);
-        $category   = mysqli_real_escape_string($conn, $_POST['category']);
-        $priority   = mysqli_real_escape_string($conn, $_POST['priority']);
-        $due_date   = mysqli_real_escape_string($conn, $_POST['due_date']);
-        $time_spent = mysqli_real_escape_string($conn, $_POST['time_spent']);
+    // Get current task data to preserve attachment
+    $sql = "SELECT attachment FROM tasks WHERE id = :id AND user_id = :user_id";
+    $stmt = $pdo->prepare($sql);
+    $stmt->bindParam(':id', $taskId);
+    $stmt->bindParam(':user_id', $_SESSION['user_id']);
+    $stmt->execute();
+    $currentTask = $stmt->fetch();
 
-        $sql = "UPDATE tasks SET
-                task_name  = '$task_name',
-                category   = '$category',
-                priority   = '$priority',
-                due_date   = '$due_date',
-                time_spent = '$time_spent'
-                WHERE id   = '$id'";
+    if (!$currentTask) {
+        header("Location: index.php");
+        exit;
+    }
 
-        if (mysqli_query($conn, $sql)) {
-            header("Location: index.php");
-            exit();
+    $attachment = $currentTask['attachment'];
+
+    // Handle remove attachment checkbox
+    if (isset($_POST['remove_attachment']) && $_POST['remove_attachment'] === '1') {
+        if ($attachment && file_exists("uploads/" . $attachment)) {
+            unlink("uploads/" . $attachment);
+        }
+        $attachment = null;
+    }
+
+    // Handle new file upload (replaces existing)
+    if (isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
+
+        $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'text/plain'];
+        $fileType = $_FILES['attachment']['type'];
+        $fileSize = $_FILES['attachment']['size'];
+
+        if (!in_array($fileType, $allowedTypes)) {
+            $errors[] = "Attachment must be an image, PDF, or TXT file.";
+        } elseif ($fileSize > 5 * 1024 * 1024) {
+            $errors[] = "Attachment must be under 5MB.";
         } else {
-            $errors[] = "Something went wrong. Please try again.";
+            $ext = pathinfo($_FILES['attachment']['name'], PATHINFO_EXTENSION);
+            $newFilename = "task_" . $_SESSION['user_id'] . "_" . time() . "." . $ext;
+            $destination = "uploads/" . $newFilename;
+
+            if (move_uploaded_file($_FILES['attachment']['tmp_name'], $destination)) {
+                // Delete old file if it exists
+                if ($currentTask['attachment'] && file_exists("uploads/" . $currentTask['attachment'])) {
+                    unlink("uploads/" . $currentTask['attachment']);
+                }
+                $attachment = $newFilename;
+            } else {
+                $errors[] = "Failed to upload file.";
+            }
         }
     }
+
+    // Update if no errors
+    if (empty($errors)) {
+
+        $sql = "UPDATE tasks SET
+                    task_name  = :task_name,
+                    category   = :category,
+                    priority   = :priority,
+                    due_date   = :due_date,
+                    time_spent = :time_spent,
+                    attachment = :attachment
+                WHERE id = :id AND user_id = :user_id";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindParam(':task_name', $taskName);
+        $stmt->bindParam(':category', $category);
+        $stmt->bindParam(':priority', $priority);
+        $stmt->bindParam(':due_date', $dueDate);
+        $stmt->bindParam(':time_spent', $timeSpent);
+        $stmt->bindParam(':attachment', $attachment);
+        $stmt->bindParam(':id', $taskId);
+        $stmt->bindParam(':user_id', $_SESSION['user_id']);
+        $stmt->execute();
+
+        header("Location: index.php");
+        exit;
+    }
 }
+
+// --------------------------------------------------
+// Load existing task data (to echo in the form)
+// --------------------------------------------------
+$sql = "SELECT * FROM tasks WHERE id = :id AND user_id = :user_id";
+$stmt = $pdo->prepare($sql);
+$stmt->bindParam(':id', $taskId);
+$stmt->bindParam(':user_id', $_SESSION['user_id']);
+$stmt->execute();
+
+$task = $stmt->fetch();
+
+if (!$task) {
+    header("Location: index.php");
+    exit;
+}
+
+// Include header after processing
+require "includes/header.php";
 ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Edit Task</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body>
-
-<div class="container mt-4">
+<main class="container mt-4">
     <h1 class="mb-4">Edit Task</h1>
 
-    <!-- Display errors if any -->
+    <!-- Display errors -->
     <?php if (!empty($errors)): ?>
         <div class="alert alert-danger">
-            <?php foreach ($errors as $error): ?>
-                <p class="mb-0"><?php echo $error; ?></p>
-            <?php endforeach; ?>
+            <h3>Please fix the following:</h3>
+            <ul class="mb-0">
+                <?php foreach ($errors as $error): ?>
+                    <li><?= htmlspecialchars($error); ?></li>
+                <?php endforeach; ?>
+            </ul>
         </div>
     <?php endif; ?>
 
-    <form method="POST" action="edit_task.php?id=<?php echo $id; ?>">
+    <form method="post" action="edit_task.php?id=<?= $taskId; ?>" enctype="multipart/form-data" class="mt-3">
 
-        <div class="mb-3">
-            <label>Task Name</label>
-            <input type="text" name="task_name" class="form-control" required
-                   value="<?php echo htmlspecialchars($task['task_name']); ?>">
-        </div>
+        <label for="task_name" class="form-label">Task Name</label>
+        <input
+            type="text"
+            id="task_name"
+            name="task_name"
+            class="form-control mb-3"
+            value="<?= htmlspecialchars($task['task_name']); ?>"
+            required
+        >
 
-        <div class="mb-3">
-            <label>Category</label>
-            <input type="text" name="category" class="form-control" required
-                   value="<?php echo htmlspecialchars($task['category']); ?>">
-        </div>
+        <label for="category" class="form-label">Category</label>
+        <input
+            type="text"
+            id="category"
+            name="category"
+            class="form-control mb-3"
+            value="<?= htmlspecialchars($task['category']); ?>"
+            required
+        >
 
-        <div class="mb-3">
-            <label>Priority</label>
-            <select name="priority" class="form-control" required>
-                <option value="">-- Select Priority --</option>
-                <option value="high"   <?php echo $task['priority'] == 'high'   ? 'selected' : ''; ?>>High</option>
-                <option value="medium" <?php echo $task['priority'] == 'medium' ? 'selected' : ''; ?>>Medium</option>
-                <option value="low"    <?php echo $task['priority'] == 'low'    ? 'selected' : ''; ?>>Low</option>
-            </select>
-        </div>
+        <label for="priority" class="form-label">Priority</label>
+        <select name="priority" id="priority" class="form-control mb-3" required>
+            <option value="">-- Select Priority --</option>
+            <option value="high"   <?= $task['priority'] === 'high'   ? 'selected' : ''; ?>>High</option>
+            <option value="medium" <?= $task['priority'] === 'medium' ? 'selected' : ''; ?>>Medium</option>
+            <option value="low"    <?= $task['priority'] === 'low'    ? 'selected' : ''; ?>>Low</option>
+        </select>
 
-        <div class="mb-3">
-            <label>Due Date</label>
-            <input type="date" name="due_date" class="form-control" required
-                   value="<?php echo $task['due_date']; ?>">
-        </div>
+        <label for="due_date" class="form-label">Due Date</label>
+        <input
+            type="date"
+            id="due_date"
+            name="due_date"
+            class="form-control mb-3"
+            value="<?= htmlspecialchars($task['due_date']); ?>"
+            required
+        >
 
-        <div class="mb-3">
-            <label>Time Spent (hours)</label>
-            <input type="number" name="time_spent" class="form-control" step="0.01" min="0" required
-                   value="<?php echo $task['time_spent']; ?>">
-        </div>
+        <label for="time_spent" class="form-label">Time Spent (hours)</label>
+        <input
+            type="number"
+            id="time_spent"
+            name="time_spent"
+            class="form-control mb-3"
+            step="0.01"
+            min="0"
+            value="<?= htmlspecialchars($task['time_spent']); ?>"
+            required
+        >
+
+        <!-- Attachment section -->
+        <label for="attachment" class="form-label">Attachment</label>
+        <?php if ($task['attachment']): ?>
+            <div class="mb-2">
+                <span class="text-muted">Current file: </span>
+                <a href="uploads/<?= htmlspecialchars($task['attachment']); ?>" target="_blank">
+                    <?= htmlspecialchars($task['attachment']); ?>
+                </a>
+                <div class="form-check mt-1">
+                    <input class="form-check-input" type="checkbox" name="remove_attachment" value="1" id="removeAttachment">
+                    <label class="form-check-label" for="removeAttachment">Remove current attachment</label>
+                </div>
+            </div>
+        <?php endif; ?>
+        <input
+            type="file"
+            id="attachment"
+            name="attachment"
+            class="form-control mb-4"
+            accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt"
+        >
 
         <a href="index.php" class="btn btn-secondary">Cancel</a>
-        <button type="submit" class="btn btn-primary">Update Task</button>
-
+        <button type="submit" class="btn btn-primary">Save Changes</button>
     </form>
-</div>
+</main>
 
-</body>
-</html>
+<?php require "includes/footer.php"; ?>

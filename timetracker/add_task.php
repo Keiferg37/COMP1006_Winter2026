@@ -1,119 +1,188 @@
 <?php
-require 'db.php';
+// Make sure user is logged in
+require "includes/auth.php";
 
+// Connect to database
+require "includes/connect.php";
+
+// Array for validation errors
 $errors = [];
 
-// Check if form was submitted
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+// Check if the form was submitted
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    // Server-side validation
-    if (empty($_POST['task_name'])) {
+    // Get and sanitize form values
+    $taskName  = trim(filter_input(INPUT_POST, 'task_name', FILTER_SANITIZE_SPECIAL_CHARS));
+    $category  = trim(filter_input(INPUT_POST, 'category', FILTER_SANITIZE_SPECIAL_CHARS));
+    $priority  = $_POST['priority'] ?? '';
+    $dueDate   = $_POST['due_date'] ?? '';
+    $timeSpent = filter_input(INPUT_POST, 'time_spent', FILTER_VALIDATE_FLOAT);
+
+    // -----------------------------
+    // Server-side Validation
+    // -----------------------------
+
+    if ($taskName === '') {
         $errors[] = "Task name is required.";
     }
-    if (empty($_POST['category'])) {
+
+    if ($category === '') {
         $errors[] = "Category is required.";
     }
-    if (empty($_POST['priority'])) {
-        $errors[] = "Priority is required.";
+
+    if ($priority === '' || !in_array($priority, ['high', 'medium', 'low'])) {
+        $errors[] = "Please select a valid priority.";
     }
-    if (empty($_POST['due_date'])) {
+
+    if ($dueDate === '') {
         $errors[] = "Due date is required.";
     }
-    if ($_POST['time_spent'] === "" || !is_numeric($_POST['time_spent'])) {
-        $errors[] = "Time spent must be a number.";
+
+    if ($timeSpent === false || $timeSpent < 0) {
+        $errors[] = "Time spent must be a valid number.";
     }
+
     // Verify reCAPTCHA
     if (empty($_POST['g-recaptcha-response'])) {
         $errors[] = "Please complete the reCAPTCHA.";
     } else {
         $secret = "6LeCfG8sAAAAAGkFqfwxrmU0VoN18VtvtEhDDDFi";
-        $response = file_get_contents("https://www.google.com/recaptcha/api/siteverify?secret=$secret&response=" . $_POST['g-recaptcha-response']);
+        $recaptchaUrl = "https://www.google.com/recaptcha/api/siteverify?secret=" . $secret . "&response=" . urlencode($_POST['g-recaptcha-response']);
+        $response = file_get_contents($recaptchaUrl);
         $responseData = json_decode($response);
         if (!$responseData->success) {
             $errors[] = "reCAPTCHA verification failed. Please try again.";
         }
     }
 
-    // If no errors, insert into database
-    if (empty($errors)) {
-        $task_name  = mysqli_real_escape_string($conn, $_POST['task_name']);
-        $category   = mysqli_real_escape_string($conn, $_POST['category']);
-        $priority   = mysqli_real_escape_string($conn, $_POST['priority']);
-        $due_date   = mysqli_real_escape_string($conn, $_POST['due_date']);
-        $time_spent = mysqli_real_escape_string($conn, $_POST['time_spent']);
+    // Handle file upload (optional)
+    $attachment = null;
+    if (isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
 
-        $sql = "INSERT INTO tasks (task_name, category, priority, due_date, time_spent)
-                VALUES ('$task_name', '$category', '$priority', '$due_date', '$time_spent')";
+        $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'text/plain'];
+        $fileType = $_FILES['attachment']['type'];
+        $fileSize = $_FILES['attachment']['size'];
 
-        if (mysqli_query($conn, $sql)) {
-            // Redirect back to index after successful insert
-            header("Location: index.php");
-            exit();
+        if (!in_array($fileType, $allowedTypes)) {
+            $errors[] = "Attachment must be an image (JPEG, PNG, GIF, WebP), PDF, or TXT file.";
+        } elseif ($fileSize > 5 * 1024 * 1024) {
+            $errors[] = "Attachment must be under 5MB.";
         } else {
-            $errors[] = "Something went wrong. Please try again.";
+            $ext = pathinfo($_FILES['attachment']['name'], PATHINFO_EXTENSION);
+            $newFilename = "task_" . $_SESSION['user_id'] . "_" . time() . "." . $ext;
+            $destination = "uploads/" . $newFilename;
+
+            if (move_uploaded_file($_FILES['attachment']['tmp_name'], $destination)) {
+                $attachment = $newFilename;
+            } else {
+                $errors[] = "Failed to upload file. Please try again.";
+            }
         }
     }
+
+    // If no errors, insert into database
+    if (empty($errors)) {
+
+        $sql = "INSERT INTO tasks (user_id, task_name, category, priority, due_date, time_spent, attachment)
+                VALUES (:user_id, :task_name, :category, :priority, :due_date, :time_spent, :attachment)";
+
+        $stmt = $pdo->prepare($sql);
+
+        $stmt->bindParam(':user_id', $_SESSION['user_id']);
+        $stmt->bindParam(':task_name', $taskName);
+        $stmt->bindParam(':category', $category);
+        $stmt->bindParam(':priority', $priority);
+        $stmt->bindParam(':due_date', $dueDate);
+        $stmt->bindParam(':time_spent', $timeSpent);
+        $stmt->bindParam(':attachment', $attachment);
+
+        $stmt->execute();
+
+        header("Location: index.php");
+        exit;
+    }
 }
+
+// Include header after processing (so redirects work)
+require "includes/header.php";
 ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Add Task</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- reCAPTCHA script -->
-    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
-</head>
-<body>
-
-<div class="container mt-4">
+<main class="container mt-4">
     <h1 class="mb-4">Add New Task</h1>
 
-    <!-- Display errors if any -->
+    <!-- Display errors -->
     <?php if (!empty($errors)): ?>
         <div class="alert alert-danger">
-            <?php foreach ($errors as $error): ?>
-                <p class="mb-0"><?php echo $error; ?></p>
-            <?php endforeach; ?>
+            <h3>Please fix the following:</h3>
+            <ul class="mb-0">
+                <?php foreach ($errors as $error): ?>
+                    <li><?= htmlspecialchars($error); ?></li>
+                <?php endforeach; ?>
+            </ul>
         </div>
     <?php endif; ?>
 
-    <form method="POST" action="add_task.php">
+    <!-- enctype="multipart/form-data" required for file uploads -->
+    <form method="post" enctype="multipart/form-data" class="mt-3">
 
-        <div class="mb-3">
-            <label>Task Name</label>
-            <input type="text" name="task_name" class="form-control" required
-                   value="<?php echo isset($_POST['task_name']) ? htmlspecialchars($_POST['task_name']) : ''; ?>">
-        </div>
+        <label for="task_name" class="form-label">Task Name</label>
+        <input
+            type="text"
+            id="task_name"
+            name="task_name"
+            class="form-control mb-3"
+            value="<?= htmlspecialchars($taskName ?? ''); ?>"
+            required
+        >
 
-        <div class="mb-3">
-            <label>Category</label>
-            <input type="text" name="category" class="form-control" required
-                   value="<?php echo isset($_POST['category']) ? htmlspecialchars($_POST['category']) : ''; ?>">
-        </div>
+        <label for="category" class="form-label">Category</label>
+        <input
+            type="text"
+            id="category"
+            name="category"
+            class="form-control mb-3"
+            value="<?= htmlspecialchars($category ?? ''); ?>"
+            required
+        >
 
-        <div class="mb-3">
-            <label>Priority</label>
-            <select name="priority" class="form-control" required>
-                <option value="">-- Select Priority --</option>
-                <option value="high"   <?php echo (isset($_POST['priority']) && $_POST['priority'] == 'high')   ? 'selected' : ''; ?>>High</option>
-                <option value="medium" <?php echo (isset($_POST['priority']) && $_POST['priority'] == 'medium') ? 'selected' : ''; ?>>Medium</option>
-                <option value="low"    <?php echo (isset($_POST['priority']) && $_POST['priority'] == 'low')    ? 'selected' : ''; ?>>Low</option>
-            </select>
-        </div>
+        <label for="priority" class="form-label">Priority</label>
+        <select name="priority" id="priority" class="form-control mb-3" required>
+            <option value="">-- Select Priority --</option>
+            <option value="high"   <?= (isset($priority) && $priority === 'high')   ? 'selected' : ''; ?>>High</option>
+            <option value="medium" <?= (isset($priority) && $priority === 'medium') ? 'selected' : ''; ?>>Medium</option>
+            <option value="low"    <?= (isset($priority) && $priority === 'low')    ? 'selected' : ''; ?>>Low</option>
+        </select>
 
-        <div class="mb-3">
-            <label>Due Date</label>
-            <input type="date" name="due_date" class="form-control" required
-                   value="<?php echo isset($_POST['due_date']) ? $_POST['due_date'] : ''; ?>">
-        </div>
+        <label for="due_date" class="form-label">Due Date</label>
+        <input
+            type="date"
+            id="due_date"
+            name="due_date"
+            class="form-control mb-3"
+            value="<?= htmlspecialchars($dueDate ?? ''); ?>"
+            required
+        >
 
-        <div class="mb-3">
-            <label>Time Spent (hours)</label>
-            <input type="number" name="time_spent" class="form-control" step="0.01" min="0" required
-                   value="<?php echo isset($_POST['time_spent']) ? $_POST['time_spent'] : ''; ?>">
-        </div>
+        <label for="time_spent" class="form-label">Time Spent (hours)</label>
+        <input
+            type="number"
+            id="time_spent"
+            name="time_spent"
+            class="form-control mb-3"
+            step="0.01"
+            min="0"
+            value="<?= htmlspecialchars($timeSpent ?? ''); ?>"
+            required
+        >
+
+        <label for="attachment" class="form-label">Attachment (optional)</label>
+        <input
+            type="file"
+            id="attachment"
+            name="attachment"
+            class="form-control mb-3"
+            accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt"
+        >
 
         <!-- Google reCAPTCHA -->
         <div class="mb-3">
@@ -122,9 +191,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         <a href="index.php" class="btn btn-secondary">Cancel</a>
         <button type="submit" class="btn btn-primary">Add Task</button>
-
     </form>
-</div>
+</main>
 
-</body>
-</html>
+<!-- reCAPTCHA script -->
+<script src="https://www.google.com/recaptcha/api.js" async defer></script>
+
+<?php require "includes/footer.php"; ?>
