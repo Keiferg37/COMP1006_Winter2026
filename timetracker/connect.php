@@ -1,9 +1,9 @@
 <?php
 // Database connection settings
-$host     = "172.31.22.43";
-$user     = "Keifer200488755";
-$password = "4F6PdjlBpc";
-$database = "Keifer200488755";
+$host     = "sql303.infinityfree.com";
+$user     = "if0_41185034";
+$password = "fDg08WjtcZoy7";
+$database = "if0_41185034_timetracker";
 
 // Create PDO connection
 try {
